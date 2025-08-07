@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Live Speech to Text</title>
+    <title>Continuous Speech to Text</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,6 +16,7 @@
             margin: 20px 0;
             overflow-y: auto;
             background: #f9f9f9;
+            white-space: pre-wrap;
         }
         button {
             padding: 10px 15px;
@@ -25,6 +26,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin-right: 10px;
         }
         button:disabled {
             background: #cccccc;
@@ -40,16 +42,18 @@
     </style>
 </head>
 <body>
-    <h1>Live Speech to Text</h1>
+    <h1>Continuous Speech to Text</h1>
     <p class="status" id="status">Click "Start Listening" to begin</p>
     <button id="startBtn">Start Listening</button>
     <button id="stopBtn" disabled>Stop Listening</button>
+    <button id="clearBtn">Clear Text</button>
     <div id="transcript"></div>
     <p id="errorMsg" class="error"></p>
 
     <script>
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
         const transcriptDiv = document.getElementById('transcript');
         const statusDiv = document.getElementById('status');
         const errorMsg = document.getElementById('errorMsg');
@@ -67,9 +71,13 @@
             const recognition = new webkitSpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            
+            // Disable auto-stop on silence
+            recognition.onend = null; 
             
             recognition.onstart = () => {
-                statusDiv.textContent = "Listening... Speak now!";
+                statusDiv.textContent = "Listening continuously... (Press Stop to end)";
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
                 errorMsg.textContent = "";
@@ -81,9 +89,6 @@
                     case 'not-allowed':
                         message += "Microphone access denied. Please allow microphone permission.";
                         break;
-                    case 'no-speech':
-                        message += "No speech detected";
-                        break;
                     default:
                         message += event.error;
                 }
@@ -93,29 +98,20 @@
                 stopBtn.disabled = true;
             };
             
-            recognition.onend = () => {
-                if (errorMsg.textContent === "") {
-                    statusDiv.textContent = "Press Start to listen again";
-                }
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-            };
-            
             recognition.onresult = (event) => {
-                let finalTranscript = '';
                 let interimTranscript = '';
+                let finalTranscript = transcriptDiv.textContent;
                 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
+                        finalTranscript += event.results[i][0].transcript + ' ';
                     } else {
-                        interimTranscript += transcript;
+                        interimTranscript += event.results[i][0].transcript;
                     }
                 }
                 
-                transcriptDiv.innerHTML = `<p style="color:#000;">${finalTranscript}</p>` + 
-                                         `<p style="color:#666;">${interimTranscript}</p>`;
+                transcriptDiv.innerHTML = finalTranscript + 
+                    '<span style="color:#666;">' + interimTranscript + '</span>';
                 
                 transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
             };
@@ -124,10 +120,9 @@
                 try {
                     // Request microphone permission first
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    stream.getTracks().forEach(track => track.stop()); // Stop immediately
+                    stream.getTracks().forEach(track => track.stop());
                     
-                    // Now start recognition
-                    transcriptDiv.innerHTML = '';
+                    transcriptDiv.textContent = '';
                     errorMsg.textContent = "";
                     recognition.start();
                 } catch (err) {
@@ -137,8 +132,15 @@
             
             stopBtn.addEventListener('click', () => {
                 recognition.stop();
+                statusDiv.textContent = "Ready to start again";
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            });
+            
+            clearBtn.addEventListener('click', () => {
+                transcriptDiv.textContent = '';
             });
         }
     </script>
 </body>
-</html>
+    </html>
