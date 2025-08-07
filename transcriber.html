@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Speech to Text</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #transcript {
+            height: 300px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 20px 0;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+        button {
+            padding: 10px 15px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:disabled {
+            background: #cccccc;
+        }
+        .status {
+            margin: 10px 0;
+            font-style: italic;
+            color: #666;
+        }
+        .error {
+            color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Speech to Text</h1>
+    <p class="status" id="status">Click "Start Listening" to begin</p>
+    <button id="startBtn">Start Listening</button>
+    <button id="stopBtn" disabled>Stop Listening</button>
+    <div id="transcript"></div>
+    <p id="errorMsg" class="error"></p>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const transcriptDiv = document.getElementById('transcript');
+        const statusDiv = document.getElementById('status');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        // Check if running in secure context
+        if (window.isSecureContext === false) {
+            errorMsg.textContent = "Error: Page must be served over HTTPS or localhost";
+            startBtn.disabled = true;
+        }
+        // Check browser support
+        else if (!('webkitSpeechRecognition' in window)) {
+            errorMsg.textContent = "Error: Speech recognition not supported in this browser. Try Chrome or Edge.";
+            startBtn.disabled = true;
+        } else {
+            const recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            recognition.onstart = () => {
+                statusDiv.textContent = "Listening... Speak now!";
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                errorMsg.textContent = "";
+            };
+            
+            recognition.onerror = (event) => {
+                let message = "Error occurred: ";
+                switch(event.error) {
+                    case 'not-allowed':
+                        message += "Microphone access denied. Please allow microphone permission.";
+                        break;
+                    case 'no-speech':
+                        message += "No speech detected";
+                        break;
+                    default:
+                        message += event.error;
+                }
+                errorMsg.textContent = message;
+                statusDiv.textContent = "Press Start to try again";
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            };
+            
+            recognition.onend = () => {
+                if (errorMsg.textContent === "") {
+                    statusDiv.textContent = "Press Start to listen again";
+                }
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            };
+            
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                transcriptDiv.innerHTML = `<p style="color:#000;">${finalTranscript}</p>` + 
+                                         `<p style="color:#666;">${interimTranscript}</p>`;
+                
+                transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+            };
+            
+            startBtn.addEventListener('click', async () => {
+                try {
+                    // Request microphone permission first
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop()); // Stop immediately
+                    
+                    // Now start recognition
+                    transcriptDiv.innerHTML = '';
+                    errorMsg.textContent = "";
+                    recognition.start();
+                } catch (err) {
+                    errorMsg.textContent = "Microphone access denied. Please allow permission.";
+                }
+            });
+            
+            stopBtn.addEventListener('click', () => {
+                recognition.stop();
+            });
+        }
+    </script>
+</body>
+</html>
