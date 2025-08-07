@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Continuous Speech to Text</title>
+    <title>True Continuous Speech Recognition</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,7 +16,6 @@
             margin: 20px 0;
             overflow-y: auto;
             background: #f9f9f9;
-            white-space: pre-wrap;
         }
         button {
             padding: 10px 15px;
@@ -26,7 +25,6 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            margin-right: 10px;
         }
         button:disabled {
             background: #cccccc;
@@ -42,39 +40,34 @@
     </style>
 </head>
 <body>
-    <h1>Continuous Speech to Text</h1>
+    <h1>Continuous Speech Recognition</h1>
     <p class="status" id="status">Click "Start Listening" to begin</p>
     <button id="startBtn">Start Listening</button>
     <button id="stopBtn" disabled>Stop Listening</button>
-    <button id="clearBtn">Clear Text</button>
     <div id="transcript"></div>
     <p id="errorMsg" class="error"></p>
 
     <script>
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const clearBtn = document.getElementById('clearBtn');
         const transcriptDiv = document.getElementById('transcript');
         const statusDiv = document.getElementById('status');
         const errorMsg = document.getElementById('errorMsg');
         
-        // Check if running in secure context
-        if (window.isSecureContext === false) {
-            errorMsg.textContent = "Error: Page must be served over HTTPS or localhost";
-            startBtn.disabled = true;
-        }
-        // Check browser support
-        else if (!('webkitSpeechRecognition' in window)) {
-            errorMsg.textContent = "Error: Speech recognition not supported in this browser. Try Chrome or Edge.";
+        if (!('webkitSpeechRecognition' in window)) {
+            errorMsg.textContent = "Speech recognition not supported in this browser. Try Chrome or Edge.";
             startBtn.disabled = true;
         } else {
             const recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.maxAlternatives = 1;
             
-            // Disable auto-stop on silence
-            recognition.onend = null; 
+            // Critical settings for continuous listening
+            recognition.continuous = true;       // Keep listening
+            recognition.interimResults = true;   // Show partial results
+            recognition.maxAlternatives = 1;     // Only one transcript
+            recognition.lang = 'en-US';          // Set language
+            
+            // Disable automatic stopping
+            recognition.onend = null;
             
             recognition.onstart = () => {
                 statusDiv.textContent = "Listening continuously... (Press Stop to end)";
@@ -84,50 +77,43 @@
             };
             
             recognition.onerror = (event) => {
-                let message = "Error occurred: ";
-                switch(event.error) {
-                    case 'not-allowed':
-                        message += "Microphone access denied. Please allow microphone permission.";
-                        break;
-                    default:
-                        message += event.error;
+                if (event.error === 'no-speech') {
+                    // Ignore no-speech errors during continuous listening
+                    return;
                 }
-                errorMsg.textContent = message;
-                statusDiv.textContent = "Press Start to try again";
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
+                errorMsg.textContent = `Error: ${event.error}`;
+                recognition.stop();
             };
             
             recognition.onresult = (event) => {
-                let interimTranscript = '';
-                let finalTranscript = transcriptDiv.textContent;
+                let final = '';
+                let interim = '';
                 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript + ' ';
+                        final += transcript + ' ';
                     } else {
-                        interimTranscript += event.results[i][0].transcript;
+                        interim += transcript;
                     }
                 }
                 
-                transcriptDiv.innerHTML = finalTranscript + 
-                    '<span style="color:#666;">' + interimTranscript + '</span>';
+                if (final) {
+                    transcriptDiv.innerHTML += `<p>${final}</p>`;
+                }
+                if (interim) {
+                    // Remove previous interim result if exists
+                    const oldInterim = document.getElementById('interim');
+                    if (oldInterim) oldInterim.remove();
+                    transcriptDiv.innerHTML += `<p id="interim" style="color:#666;">${interim}</p>`;
+                }
                 
                 transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
             };
             
-            startBtn.addEventListener('click', async () => {
-                try {
-                    // Request microphone permission first
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    stream.getTracks().forEach(track => track.stop());
-                    
-                    transcriptDiv.textContent = '';
-                    errorMsg.textContent = "";
-                    recognition.start();
-                } catch (err) {
-                    errorMsg.textContent = "Microphone access denied. Please allow permission.";
-                }
+            startBtn.addEventListener('click', () => {
+                transcriptDiv.innerHTML = '';
+                recognition.start();
             });
             
             stopBtn.addEventListener('click', () => {
@@ -135,10 +121,6 @@
                 statusDiv.textContent = "Ready to start again";
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-            });
-            
-            clearBtn.addEventListener('click', () => {
-                transcriptDiv.textContent = '';
             });
         }
     </script>
