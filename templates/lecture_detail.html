@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    {% if lecture %}
+        <h2>{{ lecture.title }}</h2>
+        <div class="lecture-meta">
+            <p>Course: {{ lecture.course }}</p>
+            <p>Year: {{ lecture.year }}</p>
+            <p>Author: {{ lecture.author }}</p>
+            <p>Posted: {{ lecture.timestamp.strftime('%Y-%m-%d %H:%M') }}</p>
+        </div>
+        
+        <div class="lecture-content">
+            {{ lecture.content|safe }}
+        </div>
+    {% else %}
+        <div class="alert alert-danger">
+            Lecture not found or you don't have access.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

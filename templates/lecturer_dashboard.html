@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Lecturer Dashboard</h2>
+    <div class="recording-controls">
+        <button id="startBtn" class="btn btn-primary">Start Lecture</button>
+        <button id="stopBtn" class="btn btn-danger" disabled>End Lecture</button>
+        <div id="status" class="mt-2 text-muted">Status: Ready</div>
+    </div>
+</div>
+
+<div id="lectureForm" style="display:none;">
+    <h3>Save Lecture</h3>
+    <form id="saveLectureForm">
+        <div class="form-group">
+            <label>Title</label>
+            <input type="text" class="form-control" name="title" required>
+        </div>
+        <div class="form-group">
+            <label>Course</label>
+            <input type="text" class="form-control" name="course" value="{{ session.user.course }}" required>
+        </div>
+        <div class="form-group">
+            <label>Year</label>
+            <select class="form-control" name="year" required>
+                <option value="1">First Year</option>
+                <option value="2">Second Year</option>
+                <option value="3">Third Year</option>
+                <option value="4">Fourth Year</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Transcript</label>
+            <textarea class="form-control" name="content" id="transcript" rows="10" readonly></textarea>
+        </div>
+        <button type="submit" class="btn btn-success" id="saveLectureBtn">Save Lecture</button>
+    </form>
+</div>
+
+<div class="lecture-history">
+    <h3>Your Lectures</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Course</th>
+                <th>Year</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lecture in lectures %}
+            <tr>
+                <td><a href="{{ url_for('view_lecture', lecture_id=lecture.id) }}">{{ lecture.title }}</a></td>
+                <td>{{ lecture.course }}</td>
+                <td>Year {{ lecture.year }}</td>
+                <td>{{ lecture.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Add the transformers.js script from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js"></script>
+<script>
+const FILLERS = [
+    "um", "uh", "like", "you know", "so", "actually", "basically", "literally", "I mean", "right", "okay", "well"
+];
+
+function filterFillers(text) {
+    let filtered = text;
+    FILLERS.forEach(filler => {
+        const regex = new RegExp("\\b" + filler + "\\b[,. ]*", "gi");
+        filtered = filtered.replace(regex, "");
+    });
+    return filtered.replace(/\s{2,}/g, " ").trim();
+}
+
+// Remove consecutive repeated words and phrases
+function dedupeWords(text) {
+    return text.replace(/\b(\w+)( \1\b)+/gi, '$1');
+}
+function dedupePhrases(text) {
+    let sentences = text.split(/([.?!]\s)/g);
+    let seen = new Set();
+    let result = [];
+    for (let s of sentences) {
+        let trimmed = s.trim();
+        if (trimmed && !seen.has(trimmed.toLowerCase())) {
+            seen.add(trimmed.toLowerCase());
+            result.push(trimmed);
+        }
+    }
+    return result.join(' ').replace(/\s([.?!])/g, '$1');
+}
+
+let recognition;
+let isRecording = false;
+let finalTranscript = '';
+let processedTranscript = '';
+
+function updateStatus(message) {
+    document.getElementById("status").textContent = `Status: ${message}`;
+}
+
+function supportsSpeechRecognition() {
+    return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+}
+
+function getSpeechRecognition() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+    const lectureForm = document.getElementById('lectureForm');
+    const saveForm = document.getElementById('saveLectureForm');
+    const saveLectureBtn = document.getElementById('saveLectureBtn');
+    const transcriptArea = document.getElementById('transcript');
+
+    startBtn.addEventListener('click', function() {
+        const SpeechRecognition = getSpeechRecognition();
+        if (!SpeechRecognition) {
+            updateStatus("Speech Recognition not supported in this browser.");
+            return;
+        }
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        transcriptArea.value = "";
+        finalTranscript = '';
+        processedTranscript = '';
+        isRecording = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        lectureForm.style.display = 'block';
+        saveLectureBtn.style.display = ''; // Ensure save is visible at start
+
+        recognition.onstart = function() {
+            updateStatus("Listening...");
+        };
+
+        recognition.onend = function() {
+            if (isRecording) {
+                recognition.start();
+            } else {
+                updateStatus("Recognition stopped.");
+            }
+        };
+
+        recognition.onerror = function(event) {
+            updateStatus("Error: " + event.error);
+        };
+
+        recognition.onresult = function(event) {
+            let interim_transcript = '';
+            let new_final = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    new_final += event.results[i][0].transcript + " ";
+                } else {
+                    interim_transcript += event.results[i][0].transcript;
+                }
+            }
+            if (new_final) {
+                finalTranscript += new_final;
+            }
+            let filteredLive = dedupeWords(filterFillers(finalTranscript));
+            transcriptArea.value = filteredLive + (interim_transcript ? ' [Partial] ' + dedupeWords(filterFillers(interim_transcript)) : "");
+            transcriptArea.scrollTop = transcriptArea.scrollHeight;
+        };
+        recognition.start();
+    });
+
+    stopBtn.addEventListener('click', async function() {
+        isRecording = false;
+        if (recognition) {
+            recognition.stop();
+        }
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        // Hide save button during correction
+        saveLectureBtn.style.display = 'none';
+        updateStatus("Processing transcript with AI, please wait...");
+
+        // Clean up transcript, remove fillers, dedupe, and correct grammar
+        let filtered = dedupeWords(filterFillers(finalTranscript));
+        filtered = dedupePhrases(filtered);
+
+        try {
+            updateStatus("Loading grammar correction model (first run may take 1-2 minutes)...");
+            const pipeline = await window.transformers.pipeline(
+                "text2text-generation",
+                "Xenova/grammar-correction"
+            );
+            updateStatus("Correcting transcript...");
+            const output = await pipeline(filtered, {
+                max_new_tokens: 512
+            });
+            processedTranscript = output[0].generated_text;
+            transcriptArea.value = processedTranscript;
+            updateStatus("Transcript corrected and ready to save.");
+            saveLectureBtn.style.display = ''; // Show after correction
+        } catch (e) {
+            // If model load/correction fails, fallback to filtered
+            processedTranscript = filtered;
+            transcriptArea.value = processedTranscript;
+            updateStatus("Correction failed, using filtered transcript.");
+            saveLectureBtn.style.display = ''; // Allow save even if correction fails
+        }
+        transcriptArea.scrollTop = transcriptArea.scrollHeight;
+    });
+
+    saveForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = {
+            title: this.title.value,
+            course: this.course.value,
+            year: this.year.value,
+            content: processedTranscript || transcriptArea.value
+        };
+        try {
+            updateStatus("Saving lecture...");
+            const response = await fetch('/api/save_lecture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const result = await response.json();
+            if (result.success) {
+                updateStatus("Lecture saved successfully!");
+                alert('Lecture saved successfully!');
+                window.location.reload();
+            } else {
+                updateStatus(`Error: ${result.error || 'Unknown error'}`);
+                alert('Error saving lecture: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            updateStatus(`Save error: ${error.message}`);
+            alert('Network error while saving lecture');
+        }
+    });
+
+    if (!supportsSpeechRecognition()) {
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+        updateStatus("Speech Recognition not supported in this browser.");
+    }
+});
+</script>
+{% endblock %}

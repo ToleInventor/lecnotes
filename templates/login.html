@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Loading overlay with smooth transition -->
+<div id="loading-overlay" style="
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease-out;
+">
+    <!-- Replace with your preferred loading image -->
+    <img src="{{ url_for('static', filename='images/loading-spinner.gif') }}" 
+         alt="Loading..." 
+         style="width: 100px; height: 100px;">
+</div>
+
+<!-- Main content (hidden initially) -->
+<div id="main-content" style="opacity: 0; transition: opacity 0.5s ease-in;">
+    <div class="form-container" style="max-width: 500px; margin: 50px auto;">
+        <h2 style="text-align: center; margin-bottom: 20px;">Login</h2>
+        <form method="POST" action="{{ url_for('main') }}">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group">
+                {{ form.userName.label }}
+                {{ form.userName(class="form-control") }}
+            </div>
+            
+            <div class="form-group">
+                {{ form.password.label }}
+                {{ form.password(class="form-control") }}
+            </div>
+            
+            <div class="form-group">
+                {{ form.role.label }}
+                {{ form.role(class="form-control") }}
+            </div>
+            
+            <div class="form-group">
+                {{ form.submit(class="btn") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // When page finishes loading
+        window.addEventListener('load', function() {
+            const overlay = document.getElementById('loading-overlay');
+            const content = document.getElementById('main-content');
+            
+            // Fade out the overlay
+            overlay.style.opacity = '0';
+            
+            // After fade completes, hide overlay and show content
+            setTimeout(function() {
+                overlay.style.display = 'none';
+                content.style.opacity = '1';
+            }, 500); // Matches the 0.5s transition duration
+        });
+        
+        // Fallback in case load event doesn't fire
+        setTimeout(function() {
+            const overlay = document.getElementById('loading-overlay');
+            const content = document.getElementById('main-content');
+            if (overlay.style.display !== 'none') {
+                overlay.style.opacity = '0';
+                setTimeout(function() {
+                    overlay.style.display = 'none';
+                    content.style.opacity = '1';
+                }, 500);
+            }
+        }, 3000); // Maximum 3 second wait
+    });
+</script>
+
+<style>
+    /* Optional: Add this to your CSS file for better organization */
+    
+    #loading-overlay {
+    transition: opacity 10s ease-out; /* Changed from 0.5s to 1s */
+}
+    
+    #main-content {
+        transition-delay: 0.3s; /* Slight delay before content fades in */
+    }
+</style>
+{% endblock %}

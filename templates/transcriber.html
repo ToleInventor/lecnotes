@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper Live Transcription</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            flex-grow: 1;
+        }
+        button:hover {
+            background-color: #3a5a80;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        #recordBtn {
+            background-color: #e74c3c;
+        }
+        #recordBtn.recording {
+            background-color: #c0392b;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: #f1f8fe;
+            min-height: 100px;
+            white-space: pre-wrap;
+            border: 1px solid #d1e3f8;
+        }
+        .status {
+            margin-top: 10px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #e74c3c;
+            background-color: #fdecea;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .success {
+            color: #27ae60;
+        }
+        #audioVisualizer {
+            width: 100%;
+            height: 60px;
+            background-color: #f1f1f1;
+            margin: 15px 0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <h1>Whisper Live Transcription</h1>
+    <div class="container">
+        <div class="input-group">
+            <label for="hfToken">Hugging Face API Token:</label>
+            <input type="password" id="hfToken" placeholder="Enter your Hugging Face API token">
+            <small>Get your token from <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face settings</a></small>
+        </div>
+
+        <div class="input-group">
+            <label for="modelSelect">Model:</label>
+            <select id="modelSelect">
+                <option value="facebook/whisper-tiny.en">Tiny (English)</option>
+                <option value="facebook/whisper-base.en">Base (English)</option>
+                <option value="facebook/whisper-small.en">Small (English)</option>
+                <option value="facebook/whisper-medium.en" selected>Medium (English)</option>
+                <option value="facebook/whisper-large-v3">Large (Multilingual)</option>
+            </select>
+        </div>
+
+        <div id="audioVisualizer"></div>
+
+        <div class="control-panel">
+            <button id="recordBtn">Start Recording</button>
+            <button id="stopBtn" disabled>Stop</button>
+            <button id="uploadBtn">Upload Audio File</button>
+            <input type="file" id="fileInput" accept="audio/*" style="display: none;">
+        </div>
+
+        <div id="status" class="status">Ready to record</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div class="input-group">
+            <label>Transcription Results:</label>
+            <div id="results">Press "Start Recording" to begin...</div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('status');
+        const errorDiv = document.getElementById('error');
+        const hfTokenInput = document.getElementById('hfToken');
+        const modelSelect = document.getElementById('modelSelect');
+        const audioVisualizer = document.getElementById('audioVisualizer');
+
+        // Audio variables
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioContext;
+        let analyser;
+        let dataArray;
+        let animationId;
+
+        // Check for microphone support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showError("Your browser doesn't support microphone access or you're not in a secure context (HTTPS/localhost)");
+            recordBtn.disabled = true;
+        }
+
+        // Event Listeners
+        recordBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileUpload);
+
+        // Initialize audio context for visualization
+        function initAudioContext(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            analyser.fftSize = 64;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            visualizeAudio();
+        }
+
+        // Audio visualization
+        function visualizeAudio() {
+            animationId = requestAnimationFrame(visualizeAudio);
+            analyser.getByteFrequencyData(dataArray);
+            
+            // Clear visualizer
+            audioVisualizer.innerHTML = '';
+            
+            // Create bars for each frequency bin
+            const barWidth = (audioVisualizer.offsetWidth / dataArray.length) * 2.5;
+            let x = 0;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const barHeight = dataArray[i] / 2;
+                const bar = document.createElement('div');
+                bar.style.position = 'absolute';
+                bar.style.bottom = '0';
+                bar.style.left = x + 'px';
+                bar.style.width = barWidth + 'px';
+                bar.style.height = barHeight + 'px';
+                bar.style.backgroundColor = `hsl(${200 + (dataArray[i] / 255 * 100)}, 70%, 50%)`;
+                bar.style.borderRadius = '2px';
+                audioVisualizer.appendChild(bar);
+                x += barWidth + 2;
+            }
+        }
+
+        // Start recording
+        async function startRecording() {
+            errorDiv.style.display = 'none';
+            
+            if (!hfTokenInput.value) {
+                showError("Please enter your Hugging Face API token");
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                initAudioContext(stream);
+                
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    cancelAnimationFrame(animationId);
+                    audioVisualizer.innerHTML = '';
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await transcribeAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start(1000); // Collect data every second
+                recordBtn.textContent = "Recording...";
+                recordBtn.classList.add('recording');
+                stopBtn.disabled = false;
+                statusDiv.textContent = "Recording audio...";
+                resultsDiv.textContent = "Listening...";
+                
+            } catch (error) {
+                showError(`Microphone access error: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                recordBtn.textContent = "Start Recording";
+                recordBtn.classList.remove('recording');
+                stopBtn.disabled = true;
+                statusDiv.textContent = "Processing audio...";
+            }
+        }
+
+        // Handle file upload
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (!hfTokenInput.value) {
+                showError("Please enter your Hugging Face API token");
+                return;
+            }
+
+            if (file.size > 25 * 1024 * 1024) { // 25MB limit
+                showError("File too large (max 25MB)");
+                return;
+            }
+
+            statusDiv.textContent = "Processing uploaded file...";
+            resultsDiv.textContent = "";
+            errorDiv.style.display = 'none';
+            
+            await transcribeAudio(file);
+        }
+
+        // Transcribe audio using Hugging Face API
+        async function transcribeAudio(audioData) {
+            try {
+                const formData = new FormData();
+                formData.append('file', audioData, 'recording.webm');
+                
+                const response = await fetch(
+                    `https://api-inference.huggingface.co/models/${modelSelect.value}`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${hfTokenInput.value}`
+                        },
+                        body: formData
+                    }
+                );
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (result.text) {
+                        resultsDiv.textContent = result.text;
+                        statusDiv.textContent = "Transcription successful!";
+                        statusDiv.className = "status success";
+                    } else {
+                        showError("No transcription returned from API");
+                    }
+                } else {
+                    let errorMsg = result.error || response.statusText;
+                    if (response.status === 503 && result.estimated_time) {
+                        errorMsg += ` (Model loading, estimated time: ${result.estimated_time}s)`;
+                    }
+                    showError(`API Error: ${errorMsg}`);
+                }
+            } catch (error) {
+                showError(`Network error: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        // Display error messages
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            statusDiv.textContent = "Error occurred";
+            statusDiv.className = "status";
+        }
+
+        // Check for HTTPS/localhost
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            showError("Microphone access requires HTTPS or localhost. For testing, you can:");
+            const workaround = document.createElement('div');
+            workaround.innerHTML = `
+                <ol>
+                    <li>Use Chrome and enable: <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></li>
+                    <li>Add your URL to the list</li>
+                    <li>Or test on localhost</li>
+                </ol>
+            `;
+            errorDiv.appendChild(workaround);
+        }
+    </script>
+</body>
+</html>
