@@ -1,0 +1,10 @@
+flask
+flask_sqlalchemy
+flask_wtf
+wtforms
+passlib
+os
+datetime
+requests
+werkzeug
+dotenv
