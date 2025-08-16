@@ -1,4 +1,4 @@
-gramformer
+git+https://github.com/PrithivirajDamodaran/Gramformer.git
 torch
 transformers
 gunicorn
