@@ -10,6 +10,13 @@ import requests
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
+import language_tool_python
+tool = language_tool_python.LanguageTool('en-US')
+
+def correct_grammar(text):
+    matches = tool.check(text)
+    return language_tool_python.utils.correct(text, matches)
+
 # Initialize Flask app
 load_dotenv()
 app = Flask(__name__)
@@ -25,7 +32,7 @@ app.config['WHISPER_MODEL'] = 'openai/whisper-medium'
 db = SQLAlchemy(app)
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Models (unchanged from your original)
+# Models
 class User(db.Model):
     __tablename__ = 'users'
     userName = db.Column(db.String(80), primary_key=True, nullable=False)
@@ -52,7 +59,7 @@ class Enrollment(db.Model):
     student_id = db.Column(db.String(80), db.ForeignKey('users.userName'))
     course_code = db.Column(db.String(120), nullable=False)
 
-# Forms (unchanged from your original)
+# Forms
 class SignInForm(FlaskForm):
     userName = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
@@ -92,7 +99,7 @@ class LectureForm(FlaskForm):
     ], validators=[DataRequired()])
     submit = SubmitField("Save Lecture")
 
-# Routes (your original routes remain unchanged)
+# Routes
 @app.route("/", methods=["GET", "POST"])
 def main():
     form = SignInForm()
@@ -265,11 +272,15 @@ def save_lecture():
         return jsonify({'error': 'Missing required fields'}), 400
         
     try:
+        # Correct grammar in title and content!
+        corrected_title = correct_grammar(data['title'])
+        corrected_content = correct_grammar(data['content'])
+        
         new_lecture = Lecture(
-            title=data['title'],
+            title=corrected_title,
             course=data['course'],
             year=data['year'],
-            content=data['content'],
+            content=corrected_content,
             author=session['user']['username']
         )
         db.session.add(new_lecture)
@@ -279,7 +290,7 @@ def save_lecture():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-app.route("/testing")
+@app.route("/testing")
 def aroo():
     return render_template("transcriber.html")
 
