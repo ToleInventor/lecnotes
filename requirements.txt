@@ -1,4 +1,6 @@
-language_tool_python
+gramformer
+torch
+transformers
 gunicorn
 flask
 flask_sqlalchemy
