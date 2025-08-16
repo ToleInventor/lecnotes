@@ -10,12 +10,15 @@ import requests
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
-import language_tool_python
-tool = language_tool_python.LanguageTool('en-US')
+# --- Use Gramformer for grammar correction ---
+from gramformer import Gramformer
+
+gf = Gramformer(models=1)  # 1 means grammar correction only
 
 def correct_grammar(text):
-    matches = tool.check(text)
-    return language_tool_python.utils.correct(text, matches)
+    corrected = list(gf.correct(text))
+    # Gramformer returns a set of corrected sentences, pick the first (best) one
+    return corrected[0] if corrected else text
 
 # Initialize Flask app
 load_dotenv()
