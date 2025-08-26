@@ -14,7 +14,7 @@
                         <p>Year: {{ lecture.year }}</p>
                         <p>Posted on: {{ lecture.timestamp.strftime('%Y-%m-%d') }}</p>
                         <div style="display: flex; justify-content: flex-end;">
-                            <a href="{{ url_for('view_lecture', lecture_id=lecture.id) }}" class="btn" style="background-color: #007bff; color:white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">
+                            <a href="{{ url_for('view_lecture', lecture_id=lecture.id) }}" class="btn" style="background-color: #007bff; color:white; padding: 8px 15px; border-radius: 4px; text-decoration: none; margin: 0 auto">
                                 View Lecture
                             </a>
                         </div>
