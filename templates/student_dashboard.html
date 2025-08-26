@@ -8,14 +8,16 @@
         <div class="lectures-list">
             {% if lectures %}
                 {% for lecture in lectures %}
-                    <div class="lecture-card">
+                    <div class="lecture-card" style="border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px;">
                         <h3>{{ lecture.title }}</h3>
                         <p>Course: {{ lecture.course }}</p>
                         <p>Year: {{ lecture.year }}</p>
                         <p>Posted on: {{ lecture.timestamp.strftime('%Y-%m-%d') }}</p>
-                        <a href="{{ url_for('view_lecture', lecture_id=lecture.id) }}" class="btn">
-                            View Lecture
-                        </a>
+                        <div style="display: flex; justify-content: flex-end;">
+                            <a href="{{ url_for('view_lecture', lecture_id=lecture.id) }}" class="btn" style="background-color: #007bff; color:white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">
+                                View Lecture
+                            </a>
+                        </div>
                     </div>
                 {% endfor %}
             {% else %}
